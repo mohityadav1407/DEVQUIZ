@@ -1,85 +1,95 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { getStats } from '../utils/api'
 
-const MOCK_ACTIVITY = [
-  { id: 1, type: 'quiz', label: 'Completed React Quiz', score: 8, total: 10, date: 'Today, 10:30 AM', icon: '🧠' },
-  { id: 2, type: 'note', label: 'Created note: CSS Flexbox', date: 'Today, 9:15 AM', icon: '📝' },
-  { id: 3, type: 'quiz', label: 'Completed Backend Quiz', score: 6, total: 10, date: 'Yesterday, 4:00 PM', icon: '🧠' },
-  { id: 4, type: 'note', label: 'Created note: JWT Auth', date: 'Yesterday, 2:30 PM', icon: '📝' },
-  { id: 5, type: 'quiz', label: 'Completed JS Quiz', score: 9, total: 10, date: '2 days ago', icon: '🧠' },
-]
-
-const CATEGORY_PROGRESS = [
-  { label: 'Frontend', percent: 80, color: 'bg-purple-500' },
-  { label: 'JavaScript', percent: 90, color: 'bg-yellow-500' },
-  { label: 'React', percent: 75, color: 'bg-blue-500' },
-  { label: 'Backend', percent: 60, color: 'bg-green-500' },
-  { label: 'Database', percent: 45, color: 'bg-red-500' },
-]
-
-const QUICK_LINKS = [
-  { label: 'Start Quiz', icon: '🧠', desc: 'Test your knowledge', to: '/quiz', color: 'border-indigo-800 hover:border-indigo-500' },
-  { label: 'My Notes', icon: '📝', desc: 'Review your notes', to: '/notes', color: 'border-green-800 hover:border-green-500' },
-]
+const CATEGORY_COLORS = {
+  Frontend: 'bg-purple-500',
+  JavaScript: 'bg-yellow-500',
+  React: 'bg-blue-500',
+  Backend: 'bg-green-500',
+  Database: 'bg-red-500',
+}
 
 export default function Dashboard() {
   const { user } = useAuth()
+  const [stats, setStats] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('activity')
 
-  const stats = [
-    { label: 'Quizzes Taken', value: 12, icon: '🧠', change: '+3 this week' },
-    { label: 'Avg Score', value: '78%', icon: '🎯', change: '+5% vs last week' },
-    { label: 'Notes Created', value: 8, icon: '📝', change: '+2 this week' },
-    { label: 'Day Streak', value: 5, icon: '🔥', change: 'Keep it up!' },
-  ]
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await getStats()
+        setStats(res.data)
+      } catch (err) {
+        console.error('Failed to fetch stats:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchStats()
+  }, [])
 
-  const getScoreColor = (score, total) => {
-    const pct = (score / total) * 100
-    if (pct >= 80) return 'text-green-400'
-    if (pct >= 50) return 'text-yellow-400'
-    return 'text-red-400'
-  }
+  const statCards = [
+    { label: 'Quizzes Taken', value: stats?.stats?.totalQuizzes || 0, icon: '🧠' },
+    { label: 'Avg Score', value: stats?.stats?.avgScore ? `${stats.stats.avgScore}%` : '0%', icon: '🎯' },
+    { label: 'Notes Created', value: stats?.stats?.totalNotes || 0, icon: '📝' },
+    { label: 'Categories', value: '5', icon: '📚' },
+  ]
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-8">
 
-      {/* Welcome Header */}
+      {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white">
           Welcome back, <span className="text-indigo-400">{user?.name || 'Developer'}</span> 👋
         </h1>
-        <p className="text-gray-500 mt-1 text-sm">Here's your learning progress at a glance</p>
+        <p className="text-gray-500 mt-1 text-sm">Here is your learning progress</p>
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        {stats.map((stat, i) => (
-          <div key={i} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-gray-600 transition">
-            <div className="text-2xl mb-3">{stat.icon}</div>
-            <p className="text-2xl font-bold text-white mb-1">{stat.value}</p>
-            <p className="text-gray-400 text-xs mb-2">{stat.label}</p>
-            <p className="text-indigo-400 text-xs">{stat.change}</p>
-          </div>
-        ))}
-      </div>
+      {loading ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 animate-pulse">
+              <div className="h-8 w-8 bg-gray-700 rounded mb-3" />
+              <div className="h-6 w-16 bg-gray-700 rounded mb-2" />
+              <div className="h-4 w-24 bg-gray-700 rounded" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {statCards.map((stat, i) => (
+            <div key={i} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-gray-600 transition">
+              <div className="text-2xl mb-3">{stat.icon}</div>
+              <p className="text-2xl font-bold text-white mb-1">{stat.value}</p>
+              <p className="text-gray-400 text-xs">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 gap-4 mb-8">
-        {QUICK_LINKS.map((link, i) => (
-          <Link
-            key={i}
-            to={link.to}
-            className={`bg-gray-900 border rounded-2xl p-5 flex items-center gap-4 transition ${link.color}`}
-          >
-            <span className="text-3xl">{link.icon}</span>
-            <div>
-              <p className="text-white font-semibold">{link.label}</p>
-              <p className="text-gray-500 text-xs">{link.desc}</p>
-            </div>
-            <span className="ml-auto text-gray-600">→</span>
-          </Link>
-        ))}
+        <Link to="/quiz" className="bg-gray-900 border border-indigo-800 hover:border-indigo-500 rounded-2xl p-5 flex items-center gap-4 transition">
+          <span className="text-3xl">🧠</span>
+          <div>
+            <p className="text-white font-semibold">Start Quiz</p>
+            <p className="text-gray-500 text-xs">Test your knowledge</p>
+          </div>
+          <span className="ml-auto text-gray-600">→</span>
+        </Link>
+        <Link to="/notes" className="bg-gray-900 border border-green-800 hover:border-green-500 rounded-2xl p-5 flex items-center gap-4 transition">
+          <span className="text-3xl">📝</span>
+          <div>
+            <p className="text-white font-semibold">My Notes</p>
+            <p className="text-gray-500 text-xs">Review your notes</p>
+          </div>
+          <span className="ml-auto text-gray-600">→</span>
+        </Link>
       </div>
 
       {/* Tabs */}
@@ -89,9 +99,7 @@ export default function Dashboard() {
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`px-5 py-2 rounded-lg text-sm font-medium capitalize transition
-              ${activeTab === tab
-                ? 'bg-indigo-600 text-white'
-                : 'text-gray-400 hover:text-white'}`}
+              ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`}
           >
             {tab === 'activity' ? '📋 Activity' : '📊 Progress'}
           </button>
@@ -101,56 +109,61 @@ export default function Dashboard() {
       {/* Activity Tab */}
       {activeTab === 'activity' && (
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-          {MOCK_ACTIVITY.map((item, i) => (
-            <div
-              key={item.id}
-              className={`flex items-center gap-4 px-6 py-4 hover:bg-gray-800/50 transition
-                ${i !== MOCK_ACTIVITY.length - 1 ? 'border-b border-gray-800' : ''}`}
-            >
-              <div className="text-2xl w-10 text-center">{item.icon}</div>
-              <div className="flex-1">
-                <p className="text-white text-sm font-medium">{item.label}</p>
-                <p className="text-gray-500 text-xs mt-0.5">{item.date}</p>
-              </div>
-              {item.type === 'quiz' && (
-                <span className={`text-sm font-bold ${getScoreColor(item.score, item.total)}`}>
-                  {item.score}/{item.total}
+          {stats?.recentActivity?.length > 0 ? (
+            stats.recentActivity.map((item, i) => (
+              <div
+                key={item._id}
+                className={`flex items-center gap-4 px-6 py-4 hover:bg-gray-800/50 transition
+                  ${i !== stats.recentActivity.length - 1 ? 'border-b border-gray-800' : ''}`}
+              >
+                <div className="text-2xl">🧠</div>
+                <div className="flex-1">
+                  <p className="text-white text-sm font-medium">{item.category} Quiz</p>
+                  <p className="text-gray-500 text-xs mt-0.5">
+                    {new Date(item.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <span className={`text-sm font-bold ${item.percentage >= 80 ? 'text-green-400' : item.percentage >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {item.percentage}%
                 </span>
-              )}
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-12 text-gray-600">
+              <p className="text-3xl mb-2">📭</p>
+              <p>No activity yet — take a quiz!</p>
             </div>
-          ))}
+          )}
         </div>
       )}
 
       {/* Progress Tab */}
       {activeTab === 'progress' && (
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
-          <p className="text-gray-400 text-sm mb-2">Your knowledge by category</p>
-          {CATEGORY_PROGRESS.map((cat, i) => (
-            <div key={i}>
+          <p className="text-gray-400 text-sm">Your knowledge by category</p>
+          {Object.entries(stats?.stats?.categoryStats || {}).map(([cat, percent]) => (
+            <div key={cat}>
               <div className="flex justify-between text-sm mb-1.5">
-                <span className="text-gray-300">{cat.label}</span>
-                <span className="text-gray-400">{cat.percent}%</span>
+                <span className="text-gray-300">{cat}</span>
+                <span className="text-gray-400">{percent}%</span>
               </div>
               <div className="w-full bg-gray-800 rounded-full h-2">
                 <div
-                  className={`${cat.color} h-2 rounded-full transition-all duration-700`}
-                  style={{ width: `${cat.percent}%` }}
+                  className={`${CATEGORY_COLORS[cat] || 'bg-indigo-500'} h-2 rounded-full transition-all duration-700`}
+                  style={{ width: `${percent}%` }}
                 />
               </div>
             </div>
           ))}
-
-          <div className="border-t border-gray-800 pt-5 mt-2">
+          <div className="border-t border-gray-800 pt-5">
             <div className="flex justify-between items-center">
               <div>
-                <p className="text-gray-400 text-sm">Overall Progress</p>
-                <p className="text-2xl font-bold text-indigo-400 mt-1">70%</p>
+                <p className="text-gray-400 text-sm">Overall Average</p>
+                <p className="text-2xl font-bold text-indigo-400 mt-1">
+                  {stats?.stats?.avgScore || 0}%
+                </p>
               </div>
-              <Link
-                to="/quiz"
-                className="bg-indigo-600 hover:bg-indigo-500 transition px-5 py-2.5 rounded-xl text-sm font-semibold text-white"
-              >
+              <Link to="/quiz" className="bg-indigo-600 hover:bg-indigo-500 transition px-5 py-2.5 rounded-xl text-sm font-semibold text-white">
                 Improve Score →
               </Link>
             </div>

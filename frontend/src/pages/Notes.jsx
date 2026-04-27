@@ -1,15 +1,19 @@
-import { useState } from 'react'
-
-const INITIAL_NOTES = [
-  { id: 1, title: 'React Hooks', content: 'useState manages local state. useEffect handles side effects like API calls and timers. Always clean up subscriptions.', tag: 'React', date: '2024-01-01' },
-  { id: 2, title: 'REST API Methods', content: 'GET = read, POST = create, PUT = update, DELETE = remove. Always return proper HTTP status codes.', tag: 'Backend', date: '2024-01-02' },
-  { id: 3, title: 'CSS Flexbox', content: 'display: flex on parent. Use justify-content for horizontal, align-items for vertical alignment. flex-wrap for multiple rows.', tag: 'Frontend', date: '2024-01-03' },
-]
+import { useState, useEffect } from 'react'
+import { getNotes, createNote, updateNote, deleteNote } from '../utils/api'
 
 const TAGS = ['All', 'React', 'Frontend', 'Backend', 'Database', 'JavaScript', 'Other']
 
+const tagColors = {
+  React: 'bg-blue-900/50 text-blue-300',
+  Frontend: 'bg-purple-900/50 text-purple-300',
+  Backend: 'bg-green-900/50 text-green-300',
+  Database: 'bg-yellow-900/50 text-yellow-300',
+  JavaScript: 'bg-orange-900/50 text-orange-300',
+  Other: 'bg-gray-700 text-gray-300',
+}
+
 export default function Notes() {
-  const [notes, setNotes] = useState(INITIAL_NOTES)
+  const [notes, setNotes] = useState([])
   const [search, setSearch] = useState('')
   const [activeTag, setActiveTag] = useState('All')
   const [showForm, setShowForm] = useState(false)
@@ -17,8 +21,28 @@ export default function Notes() {
   const [deleteId, setDeleteId] = useState(null)
   const [form, setForm] = useState({ title: '', content: '', tag: 'React' })
   const [errors, setErrors] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [serverError, setServerError] = useState('')
 
-  // 🔍 Filter notes
+  // Fetch notes on load
+  useEffect(() => {
+    fetchNotes()
+  }, [])
+
+  const fetchNotes = async () => {
+    setLoading(true)
+    try {
+      const res = await getNotes()
+      setNotes(res.data.notes)
+    } catch (err) {
+      console.error('Failed to fetch notes:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Filter notes
   const filtered = notes.filter((n) => {
     const matchSearch =
       n.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -34,23 +58,27 @@ export default function Notes() {
     return e
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = validate()
     if (Object.keys(e).length > 0) { setErrors(e); return }
 
-    if (editingNote) {
-      setNotes(notes.map((n) =>
-        n.id === editingNote.id ? { ...n, ...form } : n
-      ))
-    } else {
-      const newNote = {
-        id: Date.now(),
-        ...form,
-        date: new Date().toISOString().split('T')[0]
+    setSaving(true)
+    setServerError('')
+
+    try {
+      if (editingNote) {
+        const res = await updateNote(editingNote._id, form)
+        setNotes(notes.map((n) => n._id === editingNote._id ? res.data.note : n))
+      } else {
+        const res = await createNote(form)
+        setNotes([res.data.note, ...notes])
       }
-      setNotes([newNote, ...notes])
+      closeForm()
+    } catch (err) {
+      setServerError(err.response?.data?.message || 'Something went wrong')
+    } finally {
+      setSaving(false)
     }
-    closeForm()
   }
 
   const handleEdit = (note) => {
@@ -60,9 +88,14 @@ export default function Notes() {
     setShowForm(true)
   }
 
-  const handleDelete = (id) => {
-    setNotes(notes.filter((n) => n.id !== id))
-    setDeleteId(null)
+  const handleDelete = async (id) => {
+    try {
+      await deleteNote(id)
+      setNotes(notes.filter((n) => n._id !== id))
+      setDeleteId(null)
+    } catch (err) {
+      console.error('Failed to delete note:', err)
+    }
   }
 
   const closeForm = () => {
@@ -70,15 +103,7 @@ export default function Notes() {
     setEditingNote(null)
     setForm({ title: '', content: '', tag: 'React' })
     setErrors({})
-  }
-
-  const tagColors = {
-    React: 'bg-blue-900/50 text-blue-300',
-    Frontend: 'bg-purple-900/50 text-purple-300',
-    Backend: 'bg-green-900/50 text-green-300',
-    Database: 'bg-yellow-900/50 text-yellow-300',
-    JavaScript: 'bg-orange-900/50 text-orange-300',
-    Other: 'bg-gray-700 text-gray-300',
+    setServerError('')
   }
 
   return (
@@ -91,7 +116,11 @@ export default function Notes() {
           <p className="text-gray-500 text-sm mt-1">{notes.length} notes saved</p>
         </div>
         <button
-          onClick={() => { setShowForm(true); setEditingNote(null); setForm({ title: '', content: '', tag: 'React' }) }}
+          onClick={() => {
+            setShowForm(true)
+            setEditingNote(null)
+            setForm({ title: '', content: '', tag: 'React' })
+          }}
           className="bg-indigo-600 hover:bg-indigo-500 transition px-5 py-2.5 rounded-xl text-white font-semibold text-sm"
         >
           + New Note
@@ -122,8 +151,18 @@ export default function Notes() {
         ))}
       </div>
 
-      {/* Notes Grid */}
-      {filtered.length === 0 ? (
+      {/* Loading */}
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 animate-pulse">
+              <div className="h-4 w-20 bg-gray-700 rounded mb-3" />
+              <div className="h-5 w-40 bg-gray-700 rounded mb-2" />
+              <div className="h-16 bg-gray-700 rounded" />
+            </div>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-gray-600">
           <p className="text-4xl mb-3">📭</p>
           <p className="text-lg">No notes found</p>
@@ -133,7 +172,7 @@ export default function Notes() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((note) => (
             <div
-              key={note.id}
+              key={note._id}
               className="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between hover:border-gray-600 transition group"
             >
               <div>
@@ -141,7 +180,9 @@ export default function Notes() {
                   <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${tagColors[note.tag] || tagColors.Other}`}>
                     {note.tag}
                   </span>
-                  <span className="text-xs text-gray-600">{note.date}</span>
+                  <span className="text-xs text-gray-600">
+                    {new Date(note.createdAt).toLocaleDateString()}
+                  </span>
                 </div>
                 <h3 className="text-white font-semibold text-base mb-2">{note.title}</h3>
                 <p className="text-gray-400 text-sm leading-relaxed line-clamp-3">{note.content}</p>
@@ -156,7 +197,7 @@ export default function Notes() {
                   ✏️ Edit
                 </button>
                 <button
-                  onClick={() => setDeleteId(note.id)}
+                  onClick={() => setDeleteId(note._id)}
                   className="flex-1 bg-gray-800 hover:bg-red-900/40 hover:text-red-300 text-gray-400 text-xs py-2 rounded-lg transition"
                 >
                   🗑️ Delete
@@ -167,13 +208,19 @@ export default function Notes() {
         </div>
       )}
 
-      {/* ➕ Create / Edit Modal */}
+      {/* Create / Edit Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8 w-full max-w-lg shadow-2xl">
             <h2 className="text-xl font-bold text-indigo-400 mb-6">
               {editingNote ? '✏️ Edit Note' : '➕ New Note'}
             </h2>
+
+            {serverError && (
+              <div className="bg-red-900/40 border border-red-700 text-red-300 text-sm px-4 py-3 rounded-lg mb-4">
+                {serverError}
+              </div>
+            )}
 
             <div className="space-y-4">
               <div>
@@ -224,16 +271,17 @@ export default function Notes() {
               </button>
               <button
                 onClick={handleSubmit}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-semibold transition"
+                disabled={saving}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white py-3 rounded-xl font-semibold transition"
               >
-                {editingNote ? 'Save Changes' : 'Create Note'}
+                {saving ? 'Saving...' : editingNote ? 'Save Changes' : 'Create Note'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 🗑️ Delete Confirmation Modal */}
+      {/* Delete Modal */}
       {deleteId && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8 w-full max-w-sm text-center shadow-2xl">
